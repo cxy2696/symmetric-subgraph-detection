@@ -4,13 +4,14 @@ Header-only C++17 implementation of a shifted-LDL^T symmetry detector for
 undirected graphs. Given a graph and a candidate shift `mu`, the detector returns
 vertex groups that support vectors of the adjacency eigenspace near `mu`.
 
-The method comes from Algorithm 1 of *Formulas for Detecting Symmetries in Graphs
-via Shifted Factorization*. For a disjoint union of cliques of size at least two
-and `mu = -1`, the groups are exactly the cliques. For a 4-cycle and `mu = 0`,
-this implementation returns the two opposite-vertex pairs; the partition depends
-on the basis, as described in [docs/algorithm.md](docs/algorithm.md). The
-detector is not an automorphism enumerator; see the same note for the precise
-statement and its limits.
+The shifted-factorization approach is described in the revised working note
+[docs/Finding_symmetries_in_networks.pdf](docs/Finding_symmetries_in_networks.pdf).
+The concrete algorithm and tolerances implemented here are specified in
+[docs/algorithm.md](docs/algorithm.md). For a disjoint union of cliques of size
+at least two and `mu = -1`, the groups are exactly the cliques. For a 4-cycle and
+`mu = 0`, this implementation returns the two opposite-vertex pairs; the
+partition depends on the basis. The detector is not an automorphism enumerator;
+the precise statement and its limits are in the algorithm specification.
 
 The project was originally a Python notebook built on NetworkX and SciPy. This
 repository is a dependency-free C++ rewrite with its own LDL^T factorization, a
@@ -104,8 +105,8 @@ All functions are in `namespace sna` and are available through `sna/sna.hpp`.
 
 ```cpp
 T shift       = -1;     // mu
-T block_tol   = 1e-8;   // paper epsilon, relative to max|B|
-T support_tol = 1e-5;   // paper tau: support threshold on a unit null vector
+T block_tol   = 1e-8;   // near-zero tolerance, relative to max|B|
+T support_tol = 1e-5;   // support threshold on a unit null vector
 ```
 
 Groups contain at least two vertices. Vertices within a group are sorted
@@ -163,8 +164,7 @@ pivot or 2x2 eigenvalue is treated as zero when its magnitude is below
 `block_tol * max|B|`. This makes the test invariant under rescaling. Internally
 the shifted matrix is divided by `max|B|` before factorization, which leaves its
 null space unchanged. For 0/1 adjacency matrices with a shift of order one,
-`max|B|` is of order one, which is the scale the paper's absolute epsilon
-targets.
+`max|B|` is of order one.
 
 `support_tol` is applied to unit vectors: lowering it includes more vertices,
 raising it can split a group.
@@ -181,9 +181,8 @@ choices:
 
 ## Limits
 
-* The implementation is dense: O(n^3) time and O(n^2) memory. It is not suitable
-  for very large sparse graphs, despite the sparse-factorization motivation of
-  the original note.
+* The implementation is dense: O(n^3) time and O(n^2) memory. It targets small
+  and medium matrices; a sparse factorization is not implemented.
 * The detector finds support groups of an eigenspace, not automorphism orbits.
   A clique embedded in a larger graph keeps its full `-1` eigenspace only if the
   outside connections are constant on the clique; otherwise a subspace can
@@ -226,7 +225,7 @@ examples/         cliques, extensions (weighted/multi-shift/filter), edge-list C
 tests/            test binary and helpers
 bench/            scaling check
 cmake/            installed CMake package config
-docs/algorithm.md derivation, proofs, traceability, limits
+docs/             algorithm.md (specification) and the revised working note
 ```
 
 Build targets: `example_cliques`, `example_extensions`, `example_edge_list`,
@@ -271,7 +270,8 @@ factorization must remain complete when `B` is singular, and complete pivoting
 gives a simple guarantee: an exactly zero pivot is emitted only when the
 remaining block is zero.
 
-The prototype and the note are not redistributed in this repository.
+The original Python prototype is not included. The revised working note is in
+`docs/Finding_symmetries_in_networks.pdf`.
 
 ## License
 

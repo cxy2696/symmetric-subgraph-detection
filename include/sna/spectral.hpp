@@ -2,13 +2,13 @@
 // Copyright (c) 2026 Xinyi Cui
 //
 // Detection of vertex groups that support vectors of an eigenspace of a graph at
-// a chosen shift (Algorithm 1 of the accompanying note):
+// a chosen shift. The pipeline is:
 //
-//   lines 4-5    B = A - mu*I
-//   line 6       P B P^T = L*D*L^T
-//   lines 7-35   near-zero blocks of D -> seeds -> approximate null vectors
-//   lines 37-43  union of supports -> connected components
-//   lines 44-50  refinement (here: a density filter, applied by the caller)
+//   shift      B = A - mu*I, scaled by 1/max|B|
+//   factor     P B P^T = L*D*L^T
+//   seeds      near-zero blocks of D -> approximate null vectors
+//   support    union of supports -> connected components
+//   filter     density filter, applied by the caller
 //
 // The pipeline is exposed in three pieces:
 //   approxNullSpace()  factorization + seed recovery
@@ -121,12 +121,11 @@ std::vector<std::vector<T>> approxNullSpace(const Matrix<T>& a,
     std::vector<std::vector<T>> basis;
     if (n == 0) return basis;
 
-    // Algorithm 1, lines 4-6. Divide B by max|B| first: this leaves the null
-    // space unchanged, keeps every pivot in a comparable range, and makes
-    // block_tol a direct relative threshold. The paper uses an absolute
-    // epsilon; for 0/1 matrices with a shift of order one the two agree in
-    // scale, and the relative form stays meaningful for weighted or rescaled
-    // inputs.
+    // Shift and normalize B. Dividing by max|B| leaves the null space
+    // unchanged, keeps every pivot in a comparable range, and makes block_tol a
+    // direct relative threshold. For 0/1 matrices with a shift of order one
+    // this agrees in scale with an absolute threshold, and it stays meaningful
+    // for weighted or rescaled inputs.
     Matrix<T> shifted = a;
     for (int i = 0; i < n; ++i) shifted(i, i) -= params.shift;
 
@@ -140,7 +139,7 @@ std::vector<std::vector<T>> approxNullSpace(const Matrix<T>& a,
 
     std::vector<T> seed(static_cast<std::size_t>(n), T(0));
 
-    // Algorithm 1, lines 30-35: solve L^T v = u, normalize, undo the permutation.
+    // Recover a seed: solve L^T v = u, normalize, undo the permutation.
     auto addSeed = [&](int position, T x, T y) {
         std::fill(seed.begin(), seed.end(), T(0));
         seed[static_cast<std::size_t>(position)] = x;
@@ -158,7 +157,7 @@ std::vector<std::vector<T>> approxNullSpace(const Matrix<T>& a,
         basis.push_back(std::move(vector));
     };
 
-    // Algorithm 1, lines 7-28. A 1x1 block contributes e_k. A 2x2 block
+    // Scan near-zero blocks. A 1x1 block contributes e_k. A 2x2 block
     // contributes its eigenvector when an eigenvalue is near zero; using e_k
     // would not give a null vector in general.
     for (const PivotBlock<T>& block : factor.blocks) {
@@ -196,7 +195,7 @@ std::vector<std::vector<T>> approxNullSpace(const Matrix<T>& a,
     return basis;
 }
 
-// Algorithm 1, lines 37-43. Each vector contributes a clique over its support;
+// Support union. Each vector contributes a clique over its support;
 // the connected components of that support graph are returned. A star over the
 // support spans the same connectivity, so only |supp| unions are needed.
 //
@@ -245,7 +244,7 @@ std::vector<std::vector<int>> groupBySupport(const std::vector<std::vector<T>>& 
     return groups;
 }
 
-// Algorithm 1 on a dense symmetric matrix. Returns disjoint groups of at least
+// Detector on a dense symmetric matrix. Returns disjoint groups of at least
 // two indices, each sorted ascending; the list is sorted lexicographically.
 // The matrix is assumed symmetric and is not checked for symmetry.
 template <class T>
@@ -255,8 +254,8 @@ std::vector<std::vector<int>> detectSymmetries(const Matrix<T>& a,
 }
 
 // Run the detector for several shifts and merge the results. Groups found at
-// more than one shift are returned once (Algorithm 1, line 51); the result is a
-// union of per-shift groups, not necessarily a partition.
+// more than one shift are returned once; the result is a union of per-shift
+// groups, not necessarily a partition.
 template <class T>
 std::vector<std::vector<int>> detectSymmetries(const Matrix<T>& a,
                                               const std::vector<T>& shifts,
@@ -302,7 +301,7 @@ T nullSpaceResidual(const Matrix<T>& a, U shift, const std::vector<T>& x) {
     return std::sqrt(sum) / denominator;
 }
 
-// Algorithm 1 on a graph. Returns the original vertex labels.
+// Detector on a graph. Returns the original vertex labels.
 template <class T>
 std::vector<std::vector<int>> detectSymmetries(const Graph<T>& graph,
                                               const DetectorParams<T>& params = {}) {

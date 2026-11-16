@@ -1,12 +1,13 @@
 # Algorithm and implementation notes
 
 These notes state what the detector computes, why the LDL^T factorization
-produces null vectors, and which parts of the method are exact. Line numbers
-refer to Algorithm 1 of *Formulas for Detecting Symmetries in Graphs via Shifted
-Factorization*. In code, the paper's `epsilon` is `block_tol` and its `tau` is
-`support_tol`. The paper uses an absolute `epsilon`; this implementation makes
-it relative to `max|B|` so that the numerical-zero test does not depend on the
-scale of the matrix.
+produces null vectors, and which parts of the method are exact. They are the
+specification implemented by this package. The revised working note in
+[Finding_symmetries_in_networks.pdf](Finding_symmetries_in_networks.pdf)
+motivates the shifted-factorization approach; it is a working note with open
+questions, not a fixed algorithm. `block_tol` is the near-zero tolerance and
+`support_tol` is the support threshold. The tolerance is relative to `max|B|`,
+so the numerical-zero test does not depend on the scale of the matrix.
 
 ## 1. Output
 
@@ -16,7 +17,7 @@ and let `B = A - mu*I`. Let `X = ker(B)` be the null space (in exact arithmetic)
 For a vector `x`, define its support `supp(x) = { i : |x_i| > tau }`. Pick a basis
 `x_1, ..., x_q` of `X`, put a clique on each `supp(x_j)`, and take the connected
 components of the resulting support graph. The detector returns those components
-that contain at least two vertices. In this note, "group" means such a component.
+that contain at least two vertices. In these notes, "group" means such a component.
 
 The groups are vertex sets that support vectors of the `mu`-eigenspace. They are
 not automorphism orbits, and the method does not enumerate symmetries. For a
@@ -48,7 +49,7 @@ For a 1x1 zero block at position `k`, `u = e_k`. For a 2x2 block `E` with an
 eigenvalue `lambda = 0`, `u` is the corresponding eigenvector of `E`, placed at
 positions `k` and `k+1`. The 2x2 case needs the eigenvector: using `e_k` gives
 `D e_k = (E e_k, 0, ...)`, which is not zero unless `E` has a zero first column.
-The code follows the pseudocode here (line 16).
+The code uses this eigenvector.
 
 **Claim 2.** The vectors obtained from all zero blocks form a basis of `ker(B)`.
 
@@ -140,43 +141,40 @@ factorization; they may be 1x1 or 2x2 pivots.
 | Density filter | `filterByDensity` | O(sum s^2), s = group size |
 
 Total time is O(n^3), dominated by the factorization. Memory is O(n^2) for the
-matrices and the basis. The implementation is dense: the sparse scaling that
-motivates the method in the note is not implemented. The asymptotic cost is the
-same as a dense symmetric eigendecomposition; this code does not accumulate
-eigenvectors, but no constant-factor comparison is measured here.
+matrices and the basis. The implementation is dense and targets small and medium
+matrices. The asymptotic cost is the same as a dense symmetric eigendecomposition;
+this code does not accumulate eigenvectors, but no constant-factor comparison is
+measured here.
 
-## 5. Traceability to Algorithm 1
+## 5. Implementation map
 
-| Algorithm 1 | Implementation |
+| Step | Implementation |
 | --- | --- |
-| 1-3 procedure, inputs, output | `detectSymmetries` overloads |
-| 4-5 `A`, `B = A - mu*I` | `approxNullSpace` |
-| 6 `L, D, P = ldl(B)` | `factorSymmetric` |
-| 7-28 scan `D`, build seeds | block loop in `approxNullSpace` |
-| 30-35 solve, normalize, undo `P` | `addSeed` lambda |
-| 37-43 support graph, components | `groupBySupport` |
-| 44-50 refinement | `filterByDensity` (partial; see below) |
-| 51 iterate over `mu` | `detectSymmetries(matrix, shifts)` |
-| 52 return | sorted group list |
+| Build `B = A - mu*I` and scale it | `approxNullSpace` |
+| Factor `P B P^T = L D L^T` | `factorSymmetric` |
+| Scan near-zero blocks of `D` | block loop in `approxNullSpace` |
+| Solve `L^T v = u`, normalize, undo `P` | `addSeed` lambda |
+| Union supports, take components | `groupBySupport` |
+| Density filter | `filterByDensity` |
+| Iterate over shifts | `detectSymmetries(matrix, shifts)` |
+| Return sorted groups | `detectSymmetries` |
 
-Deliberate differences from the pseudocode:
+Implementation choices worth recording:
 
 * The support graph places a clique on each support. Connecting every support
   vertex to the first one spans the same components in O(|supp|) instead of
   O(|supp|^2).
 * Refinement is not part of `detectSymmetries`. The caller applies a policy, or
-  none. The paper's line 47 checks density and line 48 proposes a max-clique
-  split, but leaves the choice of clique open. The package provides a density
-  filter only; it does not compute a maximal clique or split an overlapping
-  support, because that split is not determined by the null-space data alone.
-* Pivot selection is complete pivoting (Section 3), not the unspecified
-  `ldl factor` of line 6.
+  none. The package provides a density filter only; it does not compute a
+  maximal clique or split an overlapping support, because that split is not
+  determined by the null-space data alone.
+* Pivot selection is complete pivoting (Section 3).
 * `block_tol` is relative to `max|B|` rather than absolute (Section 7). The
   shifted matrix is divided by `max|B|` before factorization, which leaves the
-  null space unchanged and keeps the pivots in a comparable range. For the 0/1
-  matrices in the paper the two conventions agree in scale.
+  null space unchanged and keeps the pivots in a comparable range. For 0/1
+  adjacency matrices the two conventions agree in scale.
 * Results are sorted deterministically: vertices ascending within a group,
-  groups lexicographically. The paper does not specify an order.
+  groups lexicographically.
 * Matrix overloads use row/column indices; graph overloads translate back to
   vertex labels.
 
