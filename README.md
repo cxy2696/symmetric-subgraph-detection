@@ -160,9 +160,11 @@ depend on insertion order.
 
 `block_tol` is relative to the largest absolute entry of `B = A - mu*I`. A
 pivot or 2x2 eigenvalue is treated as zero when its magnitude is below
-`block_tol * max|B|`. This makes the test invariant under rescaling. For 0/1
-adjacency matrices with a shift of order one, `max|B|` is of order one, which is
-the scale the paper's absolute epsilon targets.
+`block_tol * max|B|`. This makes the test invariant under rescaling. Internally
+the shifted matrix is divided by `max|B|` before factorization, which leaves its
+null space unchanged. For 0/1 adjacency matrices with a shift of order one,
+`max|B|` is of order one, which is the scale the paper's absolute epsilon
+targets.
 
 `support_tol` is applied to unit vectors: lowering it includes more vertices,
 raising it can split a group.

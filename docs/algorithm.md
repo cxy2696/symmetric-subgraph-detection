@@ -171,8 +171,10 @@ Deliberate differences from the pseudocode:
   support, because that split is not determined by the null-space data alone.
 * Pivot selection is complete pivoting (Section 3), not the unspecified
   `ldl factor` of line 6.
-* `block_tol` is relative to `max|B|` rather than absolute (Section 7). For the
-  0/1 matrices in the paper the two conventions agree in scale.
+* `block_tol` is relative to `max|B|` rather than absolute (Section 7). The
+  shifted matrix is divided by `max|B|` before factorization, which leaves the
+  null space unchanged and keeps the pivots in a comparable range. For the 0/1
+  matrices in the paper the two conventions agree in scale.
 * Results are sorted deterministically: vertices ascending within a group,
   groups lexicographically. The paper does not specify an order.
 * Matrix overloads use row/column indices; graph overloads translate back to

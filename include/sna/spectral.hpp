@@ -121,17 +121,22 @@ std::vector<std::vector<T>> approxNullSpace(const Matrix<T>& a,
     std::vector<std::vector<T>> basis;
     if (n == 0) return basis;
 
-    // Algorithm 1, lines 4-6.
+    // Algorithm 1, lines 4-6. Divide B by max|B| first: this leaves the null
+    // space unchanged, keeps every pivot in a comparable range, and makes
+    // block_tol a direct relative threshold. The paper uses an absolute
+    // epsilon; for 0/1 matrices with a shift of order one the two agree in
+    // scale, and the relative form stays meaningful for weighted or rescaled
+    // inputs.
     Matrix<T> shifted = a;
     for (int i = 0; i < n; ++i) shifted(i, i) -= params.shift;
-    const LdlResult<T> factor = factorSymmetric(shifted);
 
-    // A pivot is zero relative to the scale of the matrix that was factored.
-    // The paper uses an absolute epsilon; making it relative keeps the test
-    // meaningful for weighted or rescaled matrices (max|B| = 1 for 0/1 inputs
-    // with a shift of order one, which is the case the paper discusses).
     const T matrix_scale = maxAbsEntry(shifted);
-    const T block_tol = params.block_tol * (matrix_scale > T(0) ? matrix_scale : T(1));
+    if (matrix_scale > T(0) && matrix_scale != T(1)) {
+        for (int i = 0; i < n; ++i) {
+            for (int j = 0; j < n; ++j) shifted(i, j) /= matrix_scale;
+        }
+    }
+    const LdlResult<T> factor = factorSymmetric(shifted);
 
     std::vector<T> seed(static_cast<std::size_t>(n), T(0));
 
@@ -158,7 +163,7 @@ std::vector<std::vector<T>> approxNullSpace(const Matrix<T>& a,
     // would not give a null vector in general.
     for (const PivotBlock<T>& block : factor.blocks) {
         if (block.size == 1) {
-            if (std::abs(block.a11) < block_tol) addSeed(block.begin, T(1), T(0));
+            if (std::abs(block.a11) < params.block_tol) addSeed(block.begin, T(1), T(0));
             continue;
         }
 
@@ -170,7 +175,7 @@ std::vector<std::vector<T>> approxNullSpace(const Matrix<T>& a,
         const T eigenvalues[2] = {(trace + disc) / T(2), (trace - disc) / T(2)};
 
         for (const T eigenvalue : eigenvalues) {
-            if (std::abs(eigenvalue) >= block_tol) continue;
+            if (std::abs(eigenvalue) >= params.block_tol) continue;
 
             // Eigenvector of [a11 a21; a21 a22]. The two expressions are
             // equivalent; pick the one that does not subtract close values.
