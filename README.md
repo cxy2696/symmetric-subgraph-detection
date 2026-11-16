@@ -4,14 +4,17 @@ Header-only C++17 implementation of a shifted-LDL^T symmetry detector for
 undirected graphs. Given a graph and a candidate shift `mu`, the detector returns
 vertex groups that support vectors of the adjacency eigenspace near `mu`.
 
-The shifted-factorization approach is described in the revised working note
-[docs/Finding_symmetries_in_networks.pdf](docs/Finding_symmetries_in_networks.pdf).
-The concrete algorithm and tolerances implemented here are specified in
-[docs/algorithm.md](docs/algorithm.md). For a disjoint union of cliques of size
-at least two and `mu = -1`, the groups are exactly the cliques. For a 4-cycle and
-`mu = 0`, this implementation returns the two opposite-vertex pairs; the
-partition depends on the basis. The detector is not an automorphism enumerator;
-the precise statement and its limits are in the algorithm specification.
+The implementation follows Algorithm 1 of the algorithm note
+[docs/Finding_symmetries_in_networks_2026-02-05.pdf](docs/Finding_symmetries_in_networks_2026-02-05.pdf).
+The revised working note
+[docs/Finding_symmetries_in_networks_2026-11-16.pdf](docs/Finding_symmetries_in_networks_2026-11-16.pdf)
+is the latest discussion and lists open questions. The concrete algorithm and
+tolerances implemented here are specified in [docs/algorithm.md](docs/algorithm.md).
+For a disjoint union of cliques of size at least two and `mu = -1`, the groups are
+exactly the cliques. For a 4-cycle and `mu = 0`, this implementation returns the
+two opposite-vertex pairs; the partition depends on the basis. The detector is
+not an automorphism enumerator; the precise statement and its limits are in the
+algorithm specification.
 
 The project was originally a Python notebook built on NetworkX and SciPy. This
 repository is a dependency-free C++ rewrite with its own LDL^T factorization, a
@@ -225,7 +228,7 @@ examples/         cliques, extensions (weighted/multi-shift/filter), edge-list C
 tests/            test binary and helpers
 bench/            scaling check
 cmake/            installed CMake package config
-docs/             algorithm.md (specification) and the revised working note
+docs/             specification, algorithm note (2026-02-05), revised note (2026-11-16)
 ```
 
 Build targets: `example_cliques`, `example_extensions`, `example_edge_list`,
@@ -270,8 +273,9 @@ factorization must remain complete when `B` is singular, and complete pivoting
 gives a simple guarantee: an exactly zero pivot is emitted only when the
 remaining block is zero.
 
-The original Python prototype is not included. The revised working note is in
-`docs/Finding_symmetries_in_networks.pdf`.
+The original Python prototype is not included. Both notes are in `docs/`: the
+2026-02-05 algorithm note (with Algorithm 1) and the 2026-11-16 revised working
+note.
 
 ## License
 
