@@ -39,6 +39,7 @@
 #include <numeric>
 #include <stdexcept>
 #include <type_traits>
+#include <utility>
 #include <vector>
 
 #include "sna/matrix.hpp"
@@ -72,6 +73,13 @@ LdlResult<T> factorSymmetric(const Matrix<T>& A) {
 
     if (A.rows() != A.cols()) {
         throw std::invalid_argument("factorSymmetric: matrix must be square");
+    }
+    for (int i = 0; i < A.rows(); ++i) {
+        for (int j = 0; j < A.cols(); ++j) {
+            if (!std::isfinite(A(i, j))) {
+                throw std::invalid_argument("factorSymmetric: matrix contains non-finite entries");
+            }
+        }
     }
 
     const int n = A.rows();

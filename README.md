@@ -26,9 +26,20 @@ cmake --build build
 cd build && ctest --output-on-failure
 ```
 
-The library itself has no build step. Add `include/` to the include path, or add
-this directory with `add_subdirectory()` and link `sna::sna`. No installed CMake
-package config is provided.
+The library itself has no build step. Use any of these:
+
+- add `include/` to the include path;
+- add this directory with `add_subdirectory()` and link `sna::sna`;
+- install it and use the generated CMake package:
+
+```sh
+cmake --install build --prefix /path/to/prefix
+```
+
+```cmake
+find_package(sna CONFIG REQUIRED)
+target_link_libraries(app PRIVATE sna::sna)
+```
 
 ## Quick start
 
@@ -93,7 +104,7 @@ All functions are in `namespace sna` and are available through `sna/sna.hpp`.
 
 ```cpp
 T shift       = -1;     // mu
-T block_tol   = 1e-8;   // paper epsilon: near-zero block eigenvalue
+T block_tol   = 1e-8;   // paper epsilon, relative to max|B|
 T support_tol = 1e-5;   // paper tau: support threshold on a unit null vector
 ```
 
@@ -112,12 +123,12 @@ result can contain overlapping groups because it is a union, not a partition.
 
 | Function | Purpose |
 | --- | --- |
-| `factorSymmetric(const Matrix<T>&)` | `L`, the 1x1/2x2 blocks of `D` (`PivotBlock`), and `perm` such that `A(perm[i],perm[j]) = (L D L^T)(i,j)` |
+| `factorSymmetric(const Matrix<T>&)` | `L`, the 1x1/2x2 blocks of `D` (`PivotBlock`), and `perm` such that `A(perm[i],perm[j]) = (L D L^T)(i,j)`; rejects non-finite entries |
 | `reconstructionResidual(A, factor)` | relative Frobenius residual of `A(perm[i],perm[j]) = (L D L^T)(i,j)` |
 | `solveTransposedUnitLower(L, rhs)` | solves `L^T x = rhs` for unit lower triangular `L` |
 | `approxNullSpace(A, params)` | unit-norm basis of the approximate null space of `A - shift*I` |
 | `groupBySupport(vectors, tol)` | support union and connected components |
-| `nullSpaceResidual(A, shift, x)` | `‖(A - shift*I)x‖ / ‖x‖`; returns 0 for `x = 0` |
+| `nullSpaceResidual(A, shift, x)` | `‖(A - shift*I)x‖ / (‖x‖ * max|A - shift*I|)`; returns 0 for `x = 0` |
 | `inducedDensity(A, vertices)` | weighted density of an induced submatrix |
 
 `approxNullSpace` returns unit vectors, not an orthogonal basis.
@@ -147,10 +158,14 @@ depend on insertion order.
 
 ## Tolerances and scale
 
-`block_tol` is absolute. For a matrix whose largest entry in absolute value is
-`s`, use about `1e-8 * s`; the default `1e-8` is meant for 0/1 adjacency
-matrices. `support_tol` is applied to unit vectors: lowering it includes more
-vertices, raising it can split a group.
+`block_tol` is relative to the largest absolute entry of `B = A - mu*I`. A
+pivot or 2x2 eigenvalue is treated as zero when its magnitude is below
+`block_tol * max|B|`. This makes the test invariant under rescaling. For 0/1
+adjacency matrices with a shift of order one, `max|B|` is of order one, which is
+the scale the paper's absolute epsilon targets.
+
+`support_tol` is applied to unit vectors: lowering it includes more vertices,
+raising it can split a group.
 
 `mu` must be near an eigenvalue of interest, usually a repeated one. Common
 choices:
@@ -180,6 +195,10 @@ choices:
 * A vertex that appears only in a one-vertex support is not returned. At
   `mu = 0`, isolated vertices are in the null space but are dropped for this
   reason.
+* `block_tol` uses one global scale, `max|B|`. If a matrix mixes blocks whose
+  scales differ by more than about `1/block_tol`, a near-nullity in a small
+  block can fall below the threshold set by the large block. Run the blocks
+  separately or rescale them.
 
 ## Performance
 
@@ -204,6 +223,7 @@ include/sna/      headers: matrix, ldlt, graph, spectral, umbrella
 examples/         cliques, extensions (weighted/multi-shift/filter), edge-list CLI
 tests/            test binary and helpers
 bench/            scaling check
+cmake/            installed CMake package config
 docs/algorithm.md derivation, proofs, traceability, limits
 ```
 
@@ -230,12 +250,14 @@ added to the graph. A non-numeric weight is rejected.
 * null-vector residuals and the expected partition on random disjoint clique
   unions, including relabeled graphs;
 * a near-zero 2x2 block with one and with two eigenvalues below `block_tol`;
+* the same structure at scales `1e-20`, `1` and `1e6`, and rejection of
+  non-finite matrix entries and negative tolerances;
 * weighted cliques, a 4-cycle at zero, an attached clique, partial external
   coupling, multi-shift deduplication, the density filter,
   `float`/`double`/`long double`, and degenerate inputs;
 * rejection of malformed inputs by the public helpers.
 
-The current test binary reports 18,495 checks with zero failures.
+The current test binary reports 18,504 checks with zero failures.
 
 ## History
 

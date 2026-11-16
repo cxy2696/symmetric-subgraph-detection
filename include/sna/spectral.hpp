@@ -39,7 +39,7 @@ namespace sna {
 template <class T>
 struct DetectorParams {
     T shift = T(-1);          // mu: candidate eigenvalue
-    T block_tol = T(1e-8);    // epsilon: |pivot| or |2x2 eigenvalue| below this is near zero
+    T block_tol = T(1e-8);    // epsilon, relative to max|B|: a smaller pivot/eigenvalue is zero
     T support_tol = T(1e-5);  // tau: support threshold on a normalized null vector
 };
 
@@ -113,6 +113,9 @@ std::vector<std::vector<T>> approxNullSpace(const Matrix<T>& a,
     if (a.rows() != a.cols()) {
         throw std::invalid_argument("approxNullSpace: matrix must be square");
     }
+    if (!(params.block_tol >= T(0)) || !(params.support_tol >= T(0))) {
+        throw std::invalid_argument("approxNullSpace: tolerances must be non-negative");
+    }
 
     const int n = a.rows();
     std::vector<std::vector<T>> basis;
@@ -122,6 +125,13 @@ std::vector<std::vector<T>> approxNullSpace(const Matrix<T>& a,
     Matrix<T> shifted = a;
     for (int i = 0; i < n; ++i) shifted(i, i) -= params.shift;
     const LdlResult<T> factor = factorSymmetric(shifted);
+
+    // A pivot is zero relative to the scale of the matrix that was factored.
+    // The paper uses an absolute epsilon; making it relative keeps the test
+    // meaningful for weighted or rescaled matrices (max|B| = 1 for 0/1 inputs
+    // with a shift of order one, which is the case the paper discusses).
+    const T matrix_scale = maxAbsEntry(shifted);
+    const T block_tol = params.block_tol * (matrix_scale > T(0) ? matrix_scale : T(1));
 
     std::vector<T> seed(static_cast<std::size_t>(n), T(0));
 
@@ -148,7 +158,7 @@ std::vector<std::vector<T>> approxNullSpace(const Matrix<T>& a,
     // would not give a null vector in general.
     for (const PivotBlock<T>& block : factor.blocks) {
         if (block.size == 1) {
-            if (std::abs(block.a11) < params.block_tol) addSeed(block.begin, T(1), T(0));
+            if (std::abs(block.a11) < block_tol) addSeed(block.begin, T(1), T(0));
             continue;
         }
 
@@ -160,7 +170,7 @@ std::vector<std::vector<T>> approxNullSpace(const Matrix<T>& a,
         const T eigenvalues[2] = {(trace + disc) / T(2), (trace - disc) / T(2)};
 
         for (const T eigenvalue : eigenvalues) {
-            if (std::abs(eigenvalue) >= params.block_tol) continue;
+            if (std::abs(eigenvalue) >= block_tol) continue;
 
             // Eigenvector of [a11 a21; a21 a22]. The two expressions are
             // equivalent; pick the one that does not subtract close values.
@@ -191,6 +201,9 @@ std::vector<std::vector<T>> approxNullSpace(const Matrix<T>& a,
 template <class T>
 std::vector<std::vector<int>> groupBySupport(const std::vector<std::vector<T>>& vectors,
                                              T support_tol) {
+    if (!(support_tol >= T(0))) {
+        throw std::invalid_argument("groupBySupport: support_tol must be non-negative");
+    }
     if (vectors.empty()) return {};
 
     const std::size_t length = vectors.front().size();
@@ -252,9 +265,9 @@ std::vector<std::vector<int>> detectSymmetries(const Matrix<T>& a,
     return std::vector<std::vector<int>>(unique.begin(), unique.end());
 }
 
-// ||(A - shift*I) x|| / ||x||. A small value certifies that x is close to a null
-// vector of the shifted matrix, which is what the detector assumes. Returns 0
-// for x = 0, where the quotient is undefined.
+// ||(A - shift*I) x|| / (||x|| * max|A - shift*I|). The denominator uses the
+// same matrix scale as block_tol, so a "small" value means the same thing at
+// any scale. Returns 0 for x = 0, where the quotient is undefined.
 template <class T, class U>
 T nullSpaceResidual(const Matrix<T>& a, U shift, const std::vector<T>& x) {
     if (a.rows() != a.cols()) {
@@ -265,19 +278,23 @@ T nullSpaceResidual(const Matrix<T>& a, U shift, const std::vector<T>& x) {
         throw std::invalid_argument("nullSpaceResidual: vector size does not match matrix");
     }
     if (n == 0) return T(0);
-    const T scale = euclideanNorm(x);
-    if (!(scale > T(0))) return T(0);
+    const T vector_scale = euclideanNorm(x);
+    if (!(vector_scale > T(0))) return T(0);
     const T mu = static_cast<T>(shift);
 
     T sum = T(0);
+    T matrix_scale = T(0);
     for (int i = 0; i < n; ++i) {
         T row = -mu * x[static_cast<std::size_t>(i)];
         for (int j = 0; j < n; ++j) {
             row += a(i, j) * x[static_cast<std::size_t>(j)];
+            const T entry = a(i, j) - (i == j ? mu : T(0));
+            matrix_scale = std::max(matrix_scale, std::abs(entry));
         }
         sum += row * row;
     }
-    return std::sqrt(sum) / scale;
+    const T denominator = vector_scale * (matrix_scale > T(0) ? matrix_scale : T(1));
+    return std::sqrt(sum) / denominator;
 }
 
 // Algorithm 1 on a graph. Returns the original vertex labels.

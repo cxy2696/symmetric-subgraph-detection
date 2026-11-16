@@ -1,14 +1,37 @@
 cmake_minimum_required(VERSION 3.16)
-project(sna VERSION 0.2.0 LANGUAGES CXX)
+project(sna VERSION 0.3.0 LANGUAGES CXX)
+
+include(GNUInstallDirs)
 
 # Header-only library.
 add_library(sna INTERFACE)
 add_library(sna::sna ALIAS sna)
-target_include_directories(sna INTERFACE ${CMAKE_CURRENT_SOURCE_DIR}/include)
+target_include_directories(sna INTERFACE
+    $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
+    $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
+)
 target_compile_features(sna INTERFACE cxx_std_17)
 
-include(GNUInstallDirs)
+include(CMakePackageConfigHelpers)
+
 install(DIRECTORY include/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
+install(TARGETS sna EXPORT snaTargets)
+install(EXPORT snaTargets
+        FILE snaTargets.cmake
+        NAMESPACE sna::
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/sna)
+configure_package_config_file(
+    cmake/snaConfig.cmake.in
+    ${CMAKE_CURRENT_BINARY_DIR}/snaConfig.cmake
+    INSTALL_DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/sna)
+write_basic_package_version_file(
+    ${CMAKE_CURRENT_BINARY_DIR}/snaConfigVersion.cmake
+    VERSION ${PROJECT_VERSION}
+    COMPATIBILITY SameMinorVersion)
+install(FILES
+        ${CMAKE_CURRENT_BINARY_DIR}/snaConfig.cmake
+        ${CMAKE_CURRENT_BINARY_DIR}/snaConfigVersion.cmake
+        DESTINATION ${CMAKE_INSTALL_LIBDIR}/cmake/sna)
 
 option(SNA_BUILD_EXAMPLES "Build the examples" ON)
 option(SNA_BUILD_TESTS "Build the tests" ON)

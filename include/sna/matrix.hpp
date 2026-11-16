@@ -71,6 +71,20 @@ inline T euclideanNorm(const std::vector<T>& v) {
     return std::sqrt(sum);
 }
 
+// Largest absolute entry, or 0 for an empty matrix. Used as the scale of a
+// shifted matrix when tolerances are interpreted relatively.
+template <class T>
+inline T maxAbsEntry(const Matrix<T>& a) {
+    T largest = T(0);
+    for (int i = 0; i < a.rows(); ++i) {
+        for (int j = 0; j < a.cols(); ++j) {
+            const T value = std::abs(a(i, j));
+            if (value > largest) largest = value;
+        }
+    }
+    return largest;
+}
+
 // Symmetry check with an absolute tolerance. Useful for validating input; the
 // factorization and detector assume symmetry and do not check it themselves.
 template <class T>

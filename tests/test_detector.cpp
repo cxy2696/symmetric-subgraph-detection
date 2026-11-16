@@ -258,31 +258,33 @@ void testDensityFilter() {
 }
 
 void testNearZero2x2() {
-    // Complete pivoting picks a 2x2 block when G < 0.5*M. These matrices are
-    // scaled so that one (first case) or both (second case) eigenvalues fall
-    // below block_tol while the block itself is not tiny enough to be zero.
+    // A leading 1x1 pivot sets max|B| = 1, so the relative block tolerance is
+    // 1e-8. The trailing 2x2 block is then selected at the second step and has
+    // one (first case) or both (second case) eigenvalues below 1e-8.
     DetectorParams<double> params;
     params.shift = 0.0;
 
     {
-        Matrix<double> b(2, 2);
-        b(0, 0) = b(1, 1) = 0.7e-8;
-        b(0, 1) = b(1, 0) = 1.5e-8;
+        Matrix<double> b(3, 3);
+        b(0, 0) = 1.0;
+        b(1, 1) = b(2, 2) = 0.7e-8;
+        b(1, 2) = b(2, 1) = 1.5e-8;
         const std::vector<std::vector<double>> basis = approxNullSpace(b, params);
         CHECK(basis.size() == 1);
         CHECK(nullSpaceResidual(b, 0.0, basis[0]) < 1e-7);
-        const std::vector<std::vector<int>> expected = {{0, 1}};
+        const std::vector<std::vector<int>> expected = {{1, 2}};
         CHECK_GROUPS(detectSymmetries(b, params), expected);
     }
     {
-        Matrix<double> b(2, 2);
-        b(0, 1) = b(1, 0) = 0.9e-8;
+        Matrix<double> b(3, 3);
+        b(0, 0) = 1.0;
+        b(1, 2) = b(2, 1) = 0.9e-8;
         const std::vector<std::vector<double>> basis = approxNullSpace(b, params);
         CHECK(basis.size() == 2);
         for (const std::vector<double>& vector : basis) {
             CHECK(nullSpaceResidual(b, 0.0, vector) < 1e-7);
         }
-        const std::vector<std::vector<int>> expected = {{0, 1}};
+        const std::vector<std::vector<int>> expected = {{1, 2}};
         CHECK_GROUPS(detectSymmetries(b, params), expected);
     }
 }
@@ -367,8 +369,7 @@ void testScalarTypes() {
 
 void testTolerance() {
     // B = J + delta*I has eigenvalues 4 + delta and delta (multiplicity 3).
-    // At shift 0, a delta below block_tol is detected as an approximate null
-    // space; a delta well above it is not.
+    // The relative tolerance is block_tol * max|B| = about 4e-8.
     for (const double delta : {1e-10, 1e-6}) {
         Matrix<double> b(4, 4);
         for (int i = 0; i < 4; ++i) {
@@ -379,7 +380,9 @@ void testTolerance() {
         params.shift = 0.0;
 
         const std::vector<std::vector<double>> basis = approxNullSpace(b, params);
-        if (delta < 1e-8) {
+        // max|B| is 4 + delta, so the effective threshold is block_tol * (4 + delta).
+        const bool should_detect = delta < params.block_tol * (4.0 + delta);
+        if (should_detect) {
             CHECK(basis.size() == 3);
             for (const std::vector<double>& vector : basis) {
                 CHECK(nullSpaceResidual(b, 0.0, vector) < 10.0 * delta);
@@ -389,6 +392,34 @@ void testTolerance() {
         }
         CHECK(detectSymmetries(b, params).empty() == basis.empty());
     }
+}
+
+void testScaleInvariance() {
+    // The same structure at three scales must give the same groups: a dense
+    // 1e-10 null direction, the same matrix multiplied by 1e6, and a tiny
+    // singular matrix.
+    DetectorParams<double> params;
+    params.shift = 0.0;
+    const std::vector<std::vector<int>> expected = {{0, 1, 2, 3}};
+
+    Matrix<double> b(4, 4);
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) b(i, j) = 1.0;
+        b(i, i) += 1e-10;
+    }
+    CHECK_GROUPS(detectSymmetries(b, params), expected);
+
+    Matrix<double> large(4, 4);
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) large(i, j) = 1e6 * b(i, j);
+    }
+    CHECK_GROUPS(detectSymmetries(large, params), expected);
+
+    Matrix<double> tiny(4, 4);
+    for (int i = 0; i < 4; ++i) {
+        for (int j = 0; j < 4; ++j) tiny(i, j) = 1e-20;
+    }
+    CHECK_GROUPS(detectSymmetries(tiny, params), expected);
 }
 
 void testDegenerateInputs() {
@@ -434,6 +465,15 @@ void testDegenerateInputs() {
     CHECK_THROWS(solveTransposedUnitLower(Matrix<double>::identity(2), std::vector<double>{1.0}));
     CHECK_THROWS(nullSpaceResidual(Matrix<double>(2, 3), 0.0, std::vector<double>{1.0, 0.0}));
     CHECK_THROWS(inducedDensity(Matrix<double>(2, 3), std::vector<int>{0, 1}));
+
+    // Negative tolerances are rejected instead of silently changing the result.
+    DetectorParams<double> bad_params;
+    bad_params.block_tol = -1.0;
+    CHECK_THROWS(approxNullSpace(Matrix<double>::identity(2), bad_params));
+    bad_params.block_tol = 1e-8;
+    bad_params.support_tol = -1.0;
+    CHECK_THROWS(detectSymmetries(Matrix<double>::identity(2), bad_params));
+    CHECK_THROWS(groupBySupport(std::vector<std::vector<double>>{{1.0, 1.0}}, -1.0));
 }
 
 }  // namespace
@@ -453,5 +493,6 @@ void runDetectorTests() {
     testRandomCliqueUnions();
     testScalarTypes();
     testTolerance();
+    testScaleInvariance();
     testDegenerateInputs();
 }

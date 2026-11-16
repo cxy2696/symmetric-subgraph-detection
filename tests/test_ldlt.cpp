@@ -5,6 +5,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <limits>
 #include <random>
 #include <vector>
 
@@ -72,6 +73,11 @@ void testMatrixBasics() {
 
     const std::vector<double> v = {3.0, 4.0};
     CHECK_NEAR(euclideanNorm(v), 5.0, 1e-15);
+
+    Matrix<double> entries(2, 3);
+    entries(0, 1) = -7.0;
+    entries(1, 2) = 2.0;
+    CHECK_NEAR(maxAbsEntry(entries), 7.0, 0.0);
 
     Matrix<double> symmetric(2, 2);
     symmetric(0, 0) = 1.0;
@@ -241,6 +247,12 @@ void testTransposedSolve() {
 
 void testInvalidInput() {
     CHECK_THROWS(factorSymmetric(Matrix<double>(2, 3)));
+
+    Matrix<double> not_finite(2, 2);
+    not_finite(0, 0) = std::numeric_limits<double>::quiet_NaN();
+    CHECK_THROWS(factorSymmetric(not_finite));
+    not_finite(0, 0) = std::numeric_limits<double>::infinity();
+    CHECK_THROWS(factorSymmetric(not_finite));
 }
 
 }  // namespace

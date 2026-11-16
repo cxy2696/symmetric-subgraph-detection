@@ -4,7 +4,9 @@ These notes state what the detector computes, why the LDL^T factorization
 produces null vectors, and which parts of the method are exact. Line numbers
 refer to Algorithm 1 of *Formulas for Detecting Symmetries in Graphs via Shifted
 Factorization*. In code, the paper's `epsilon` is `block_tol` and its `tau` is
-`support_tol`.
+`support_tol`. The paper uses an absolute `epsilon`; this implementation makes
+it relative to `max|B|` so that the numerical-zero test does not depend on the
+scale of the matrix.
 
 ## 1. Output
 
@@ -76,8 +78,9 @@ that comes out of the factorization, which for this example is `{0,2}`, `{1,3}`.
 For a near-zero block, the construction gives an approximate null vector. If a
 1x1 block has value `d`, then `B_p v = d L e_k`; if a 2x2 block has eigenvalue
 `lambda`, then `B_p v = lambda L u`. In both cases the residual is the block
-value times a factor that depends on `L`. `block_tol` bounds the block value; it
-does not bound `cond(L)`, which is not checked.
+value times a factor that depends on `L`. The effective threshold is
+`block_tol * max|B|`; it bounds the block value, not `cond(L)`, which is not
+checked.
 
 ## 3. Pivot strategy
 
@@ -168,6 +171,8 @@ Deliberate differences from the pseudocode:
   support, because that split is not determined by the null-space data alone.
 * Pivot selection is complete pivoting (Section 3), not the unspecified
   `ldl factor` of line 6.
+* `block_tol` is relative to `max|B|` rather than absolute (Section 7). For the
+  0/1 matrices in the paper the two conventions agree in scale.
 * Results are sorted deterministically: vertices ascending within a group,
   groups lexicographically. The paper does not specify an order.
 * Matrix overloads use row/column indices; graph overloads translate back to
@@ -176,9 +181,12 @@ Deliberate differences from the pseudocode:
 ## 6. Exactness and limits
 
 1. **Numerical, not symbolic.** A block is treated as zero when it is below
-   `block_tol`, and a vector entry joins a support when it exceeds
-   `support_tol`. Both are absolute thresholds. For matrices whose entries are
-   not O(1), scale `block_tol` with the largest absolute entry; see Section 7.
+   `block_tol * max|B|`, and a vector entry joins a support when it exceeds
+   `support_tol` on a unit vector. The first threshold is relative to the
+   matrix, the second to the vector; neither depends on the ambient scale. The
+   matrix scale is global to `B`: if `B` has blocks with very different scales,
+   a near-nullity in a small block can fall below the threshold set by the
+   largest block. Run the blocks separately or rescale them in that case.
 
 2. **External coupling.** Let `S` be a unit-weight clique in a larger graph with
    no self-loops, and let `x` be supported on `S` with `sum(x) = 0`. For `i` in
@@ -224,9 +232,11 @@ cases:
 | `K_{a,b}` | `+sqrt(ab)`, `-sqrt(ab)`, `0` (a+b-2 times) | `0` |
 | `C_4` | `2`, `0`, `0`, `-2` | `0` |
 
-`block_tol` is absolute. For a matrix whose largest entry in absolute value is
-`s`, use about `1e-8 * s`; the default `1e-8` is intended for 0/1 adjacency
-matrices.
+`block_tol` is relative to `max|B|`: a pivot or 2x2 eigenvalue is zero when its
+magnitude is below `block_tol * max|B|`. The default `1e-8` is intended for 0/1
+adjacency matrices, where `max|B|` is of order one for a shift of order one.
+This margin is far above the rounding of an exact zero pivot, which scales with
+machine epsilon; it is a tolerance, not a formal error bound.
 
 `support_tol` is applied to unit vectors. The default `1e-5` separates genuine
 components from rounding noise for the graphs in the tests. Lowering it admits
@@ -244,7 +254,10 @@ more vertices; raising it can split a genuine group.
   3-vertex path) check that every returned vector has residual at most `1e-12`;
   the random clique-union tests check the expected group partition.
 * A near-zero 2x2 block where one eigenvalue, and separately both eigenvalues,
-  fall below `block_tol`; this exercises the 2x2 seed branch.
+  fall below `block_tol * max|B|`; this exercises the 2x2 seed branch.
+* The same structure at scales `1e-20`, `1` and `1e6`, which checks that the
+  relative tolerance is scale-invariant; non-finite entries and negative
+  tolerances are rejected.
 * The notebook example (`K_{10}` five times plus isolated vertices), weighted
   cliques, a 4-cycle at zero, an attached clique, multi-shift deduplication,
   the density filter, scalar types (`float`, `double`, `long double`), and
