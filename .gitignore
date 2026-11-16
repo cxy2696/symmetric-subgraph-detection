@@ -1,0 +1,22 @@
+# Build trees
+build/
+build-*/
+cmake-build-*/
+
+# Local reference material (the original notebook and paper are not part of the
+# library; see README "History")
+reference/
+
+# Editor and OS files
+.DS_Store
+.idea/
+.vscode/
+compile_commands.json
+
+# Python leftovers from the prototype
+__pycache__/
+*.pyc
+
+# Object files and archives
+*.o
+*.a
